@@ -8,6 +8,10 @@ import plotly.graph_objects as go
 import datetime
 warnings.filterwarnings("ignore")
 
+import array
+import matplotlib.pyplot as plt
+
+
 dpg.create_context()
 
 def print_val(sender):
@@ -90,10 +94,47 @@ def spectro(sender, app_data):
     data = np.array(dpg.get_value("y_array"))
     fs = dpg.get_value("fs")
     section = dpg.get_value("tslice")
-    data = data[section*600*int(fs):(section+1)*600*int(fs)]
+    # data = data[section*600*int(fs):(section+1)*600*int(fs)]
     f, t, Sxx = spectrogram(data, fs)
+    Sxx = np.flipud(Sxx)
+    print(Sxx.shape)
     fig = go.Figure(go.Heatmap(x=t,y=f,z=10 * np.log10(Sxx)))
     fig.write_html(f"{dpg.get_value('file_name').replace('.wav','')}_{section}.html")
+
+def spectro_texture():
+    delete_spectrogram()
+    data = np.array(dpg.get_value("y_array"))
+    fs = dpg.get_value("fs")
+    section = dpg.get_value("tslice")
+    # data = data[section*600*int(fs):(section+1)*600*int(fs)]
+    f, t, Sxx = spectrogram(data, fs)
+    Sxx = np.flipud(Sxx)
+    Sxx = 10 * np.log10(Sxx)
+    texture_data = []
+    for i in Sxx.reshape(1,-1):
+        texture_data+=list(plt.colormaps['viridis'](i/Sxx.max()))
+
+    texture_data = np.array(texture_data).reshape(1,-1)[0]
+    raw_data = array.array('f', texture_data)
+    # raw_data = np.array(texture_data).reshape(1,-1) 
+    with dpg.texture_registry(tag="text_reg", show=False):
+        dpg.add_raw_texture(width=Sxx.shape[1], 
+                            height=Sxx.shape[0], 
+                            default_value=raw_data, 
+                            format=dpg.mvFormat_Float_rgba, 
+                            tag="texture_tag")
+    
+    with dpg.window(label="Spectrogram", tag="spectro", width=400, height=400,pos=[0,550]):
+        # create plot
+        with dpg.plot(label="Spectrogram plot",tag="s_plot", height=-1, width=-1):
+            dpg.add_plot_legend()
+
+            dpg.add_plot_axis(dpg.mvXAxis, label="Time",tag="spectro_xaxis")
+            dpg.add_plot_axis(dpg.mvYAxis, label="Freq", tag="spectro_yaxis")
+
+                # series 1
+            dpg.add_image_series(texture_tag="texture_tag",bounds_min=(0,0),bounds_max=(Sxx.shape[1],Sxx.shape[0]), label="series 3", parent="spectro_yaxis", tag="spectro_series")
+            # dpg.add_heat_series(x=10*np.log10(Sxx.reshape((1,-1))),rows=len(t),cols=len(f), label="series 2", parent="yaxis2", tag="series_2")
 
 
 def delete_waveform():
@@ -105,12 +146,25 @@ def delete_waveform():
         dpg.delete_item("yaxis")
         dpg.delete_item("series_1")
 
+def delete_spectrogram():
+    if dpg.does_item_exist("spectro"):
+        dpg.hide_item("spectro")
+        dpg.delete_item("spectro")
+        dpg.delete_item("s_plot")
+        dpg.delete_item("text_reg")
+        dpg.delete_item("texture_tag")
+        dpg.delete_item("x")
+        dpg.delete_item("spectro_yaxis")
+        dpg.delete_item("spectro_series")
 
 
 with dpg.file_dialog(directory_selector=False, show=False, callback=callback, file_count=3, tag="file_dialog_tag", width=700 ,height=400):
     dpg.add_file_extension("", color=(255, 150, 150, 255))
     dpg.add_file_extension(".*")
     dpg.add_file_extension(".wav", color=(255, 255, 0, 255))
+
+
+
 
 with dpg.value_registry():
     dpg.add_string_value(label="file_path",tag="file_path",default_value="")
@@ -126,6 +180,7 @@ with dpg.window(label="Controls",tag="Controls", width=800, height=100):
     dpg.add_button(label="Plot Waveform", callback=get_data)
     dpg.add_input_int(label="Time Slice",tag="tslice",default_value=0,callback=get_data)
     dpg.add_button(label="Spectrogram",callback=spectro)
+    dpg.add_button(label="Spectrogram2",callback=spectro_texture)
 
 dpg.show_metrics()
 dpg.create_viewport(title='Custom Title',height=300,width=800)
