@@ -1,8 +1,8 @@
 # Bucket_of_Hearing
-## An open source DearPyGui application for acoustic analysis
+An open source DearPyGui application for acoustic analysis
 * Opens wav files and anything that Obspy can open
- Look at data in 10 minutes chunks
- Spectrogram the data
+* Look at data in 10 minutes chunks
+* Spectrogram the data
 ## It is still very early in development
 * I need to clean up the interface once I am done testing
 * I need to add filters and more control over the spectrogram
