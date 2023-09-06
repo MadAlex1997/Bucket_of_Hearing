@@ -23,47 +23,55 @@ def callback(sender, app_data):
     dpg.set_value("file_name",list(app_data['selections'].keys())[0])
     dpg.set_value("file_path",list(app_data['selections'].values())[0])
 
-def get_data(sender, app_data):
-    print(app_data)
+def time_slice(sender, app_data):
     file_path_string = dpg.get_value("file_path")
+    tlen = dpg.get_value("tlen")
+    fs = dpg.get_value("fs")
     sl1 = 0
-    sl2 = 600*1000
+    sl2 = tlen*fs
     sl = 0
     if sender == "tslice":
         # sl = app_data
-        sl1 = app_data*600*1000
-        sl2 = (app_data+1)*600*1000
+        sl1 = app_data*tlen*fs
+        sl2 = (app_data+1)*tlen*fs
     
     else:
         app_data = dpg.get_value("tslice")
         # sl = app_data
-        sl1 = app_data*600*1000
-        sl2 = (app_data+1)*600*1000
-    
+        sl1 = app_data*tlen*fs
+        sl2 = (app_data+1)*tlen*fs
+    return int(sl1), int(sl2)
+
+def get_data(sender, app_data):
+    print(app_data)
+    file_path_string = dpg.get_value("file_path")
+        
     if ".wav" in file_path_string:
         fs, data = wavfile.read(file_path_string)
         length = data.shape[0] / fs
         time = np.linspace(0., length, data.shape[0])
-        print(fs)
         if len(data.shape)>1:
             if data.shape[1]>1:
                 data = data.mean(axis=1)
-        
+        dpg.set_value("fs",fs)
+        sl1, sl2 = time_slice(sender=sender, app_data=app_data)
         data = data[sl1:sl2]
         time = time[sl1:sl2]
-        
+
         x_arr = list(time)
         y_arr = list(data)
         dpg.set_value("file_type","WAV")
         dpg.set_value("x_array",x_arr)
         dpg.set_value("y_array",y_arr)
-        dpg.set_value("fs",fs)
+        
 
     else:
         try:
             collect = sig_read(file_path_string)[0]
+            dpg.set_value("fs",collect.stats.sampling_rate)
             data = collect.data
             time = collect.times()
+            sl1, sl2 = time_slice(sender=sender, app_data=app_data)
             data = data[sl1:sl2]
             time = time[sl1:sl2]
             x_arr = list(time)
@@ -71,7 +79,7 @@ def get_data(sender, app_data):
             dpg.set_value("file_type","File readable by obspy")
             dpg.set_value("x_array",x_arr)
             dpg.set_value("y_array",y_arr)
-            dpg.set_value("fs",collect.stats.sampling_rate)
+            
         except:
             dpg.set_value("file_type","Not openable by OBSPY")
             return 1
@@ -80,13 +88,14 @@ def plot_wave():
     delete_waveform()
     with dpg.window(label="Waveform",tag="Waveform",height=200,width=800,pos=[0,150],on_close=delete_waveform()):
         def create_plot():
-            with dpg.plot(label="Line Series", height=-1, width=-1,parent="Waveform"):
-                dpg.add_plot_legend(parent="Line Series")
+            with dpg.plot(label="Line Series", height=-1, width=-1,parent="Waveform",query=True):
+                # dpg.add_plot_legend(parent="Line Series")
                 # dpg.add_drag_line(label="dline1", color=[255, 0, 0, 255], default_value=2.0, callback=print_val)
                 dpg.add_plot_axis(dpg.mvXAxis, label="x",tag="xaxis_tag")
                 dpg.add_plot_axis(dpg.mvYAxis, label="y", tag="yaxis")
                 sl = dpg.get_value("tslice")
-                dpg.set_axis_limits("xaxis_tag", sl*600, (sl+1)*600)
+                tlen = dpg.get_value("tlen")
+                dpg.set_axis_limits("xaxis_tag", sl*tlen, (sl+1)*tlen)
                 
                 # series 1
                 # dpg.add_line_series(x=x_arr, y=y_arr, label="series 1", parent="yaxis", tag="series_1")
@@ -97,10 +106,6 @@ def plot_wave():
         create_plot()
     # spectro_texture()
 
-        
-def bound(sender, app_data, user_data):
-    dpg.set_axis_limits("xaxis_tag", app_data*600, (1+app_data)*600)
-    dpg.set
         
 def spectro(sender, app_data):
     data = np.array(dpg.get_value("y_array"))
@@ -125,6 +130,8 @@ def spectro_texture():
     section = dpg.get_value("tslice")
     # data = data[section*600*int(fs):(section+1)*600*int(fs)]
     f, t, Sxx = spectrogram(data, fs)
+    dpg.set_value("spectro_freq",list(f))
+    dpg.set_value("spectro_time",list(t))
     Sxx = np.flipud(Sxx)
     Sxx = 10 * np.log10(Sxx)
     texture_data = []
@@ -141,13 +148,13 @@ def spectro_texture():
                             format=dpg.mvFormat_Float_rgba, 
                             tag="texture_tag")
     
-    with dpg.window(label="Spectrogram", tag="spectro", width=800, height=350,pos=[0,350]):
+    with dpg.window(label="Spectrogram", tag="spectro", width=800, height=350,pos=[0,350],):
         # create plot
-        with dpg.plot(label="Spectrogram plot",tag="s_plot", height=-1, width=-1):
-            dpg.add_plot_legend()
+        with dpg.plot(label="Spectrogram plot",tag="s_plot", height=-1, width=-1,query=True, no_mouse_pos=True):
+            # dpg.add_plot_legend()
 
-            dpg.add_plot_axis(dpg.mvXAxis, label="Time",tag="spectro_xaxis",parent="s_plot")
-            dpg.add_plot_axis(dpg.mvYAxis, label="Freq", tag="spectro_yaxis",parent="s_splot")
+            dpg.add_plot_axis(dpg.mvXAxis, label="Time",tag="spectro_xaxis",parent="s_plot",no_tick_labels=True)
+            dpg.add_plot_axis(dpg.mvYAxis, label="Freq", tag="spectro_yaxis",parent="s_splot",no_tick_labels=True)
             
                 # series 1
             dpg.add_image_series(texture_tag="texture_tag",
@@ -222,6 +229,8 @@ with dpg.value_registry():
     dpg.add_float_vect_value(label="y_array",tag="y_array",default_value=[1.0 for i in range(100)])
     dpg.add_float_vect_value(label="x_array",tag="x_array",default_value=[1.0 for i in range(100)])
     dpg.add_float_value(label="fs",tag="fs",default_value=0.0)
+    dpg.add_float_vect_value(label="spectro_freq",tag="spectro_freq" ,default_value=[])
+    dpg.add_float_vect_value(label="spectro_time",tag="spectro_time" ,default_value=[])
 
 with dpg.window(label="Controls",tag="Controls", width=800, height=100):
     with dpg.menu_bar():  
@@ -232,8 +241,8 @@ with dpg.window(label="Controls",tag="Controls", width=800, height=100):
     with dpg.group(horizontal=True):
         dpg.add_text(label="file_name",default_value="No file loaded",tag="file_name")
         dpg.add_text(label="file_type",default_value="No file loaded",tag="file_type")
-    
-    dpg.add_input_int(label="Time Slice",tag="tslice",width=100,default_value=0,callback=plot)
+    dpg.add_input_int(label="Time interval size (S)",tag="tlen",width=100,default_value=600, min_value=0, min_clamped=True,)
+    dpg.add_input_int(label="Time Slice",tag="tslice",width=100,default_value=0, min_value=0, min_clamped=True, callback=plot)
 
 with dpg.window(label="Filters",tag="filters",width=300,height=130, pos=[225,20]):
     with dpg.group(horizontal=True):
@@ -245,12 +254,63 @@ with dpg.window(label="Filters",tag="filters",width=300,height=130, pos=[225,20]
                 dpg.add_input_float(label="Band pass <",tag="bp_high",width=100)
         
             dpg.add_input_float(label="High pass >",tag="hp_val",width=100)
-        
+
+def retreive_query():
+    if dpg.is_plot_queried("s_plot"):
+        x_1, x_2, y_1, y_2 = np.array(dpg.get_plot_query_area("s_plot"))
+        tlen = dpg.get_value("tlen")
+        tstart = dpg.get_value("tslice")*tlen
+        tend = tstart + tlen
+        f = np.array(dpg.get_value("spectro_freq"))
+        t = np.array(dpg.get_value("spectro_time"))
+        time_corrected = np.linspace(tstart,tend,t.shape[0])
+        # freq_corrected = np.linspace(tstart,tend,f.shape[0])
+        # print(f)
+        t1 = time_corrected[int(x_1)]
+        t2 = time_corrected[int(x_2)]
+        f1 = f[int(y_1)]
+        f2 = f[int(y_2)]
+        dpg.set_value("text",str(f"from times {t1} to {t2} and {f1} to {f2} Hz"))
+
+def spectro_mouse_pos():
+    if dpg.does_item_exist("s_plot"):
+        if dpg.is_item_hovered("s_plot"):
+            x, y = dpg.get_plot_mouse_pos()
+            tlen = dpg.get_value("tlen")
+            tstart = dpg.get_value("tslice")*tlen
+            tend = tstart + tlen
+            f = np.array(dpg.get_value("spectro_freq"))
+            t = np.array(dpg.get_value("spectro_time"))
+            time_corrected = np.linspace(tstart,tend,t.shape[0])
+            try:
+                t1 = time_corrected[int(x)]
+                f1 = f[int(y)]
+                dpg.set_value("plot_mouse",f"{t1} s, {f1} Hz")
+            except:
+                dpg.set_value("plot_mouse","Hover the spectrogram")
+            
+        else:
+            dpg.set_value("plot_mouse","Hover the spectrogram")
+    else:
+        dpg.set_value("plot_mouse","Hover the spectrogram")
+with dpg.window(label="Annotations"):
+    dpg.add_button(label="Get Query",callback=retreive_query)
+    dpg.add_text(tag="text",default_value="Queried")
+    dpg.add_text(tag="plot_mouse",default_value="")
 
 dpg.show_metrics()
 dpg.create_viewport(title='Custom Title',height=300,width=800)
 dpg.setup_dearpygui()
 dpg.show_viewport()
 dpg.set_primary_window("Controls",True)
-dpg.start_dearpygui()
+# dpg.start_dearpygui()
+dpg.set_viewport_vsync(True)
+while dpg.is_dearpygui_running():
+    # insert here any code you would like to run in the render loop
+    # you can manually stop by using stop_dearpygui()
+    
+    # dpg.set_value("plot_mouse",str(dpg.get_plot_mouse_pos()))
+    spectro_mouse_pos()
+    # print("this will run every frame")
+    dpg.render_dearpygui_frame()
 dpg.destroy_context()
