@@ -5,7 +5,6 @@ from scipy.io import wavfile
 import numpy as np
 import warnings
 import plotly.graph_objects as go
-import datetime
 warnings.filterwarnings("ignore")
 
 import array
@@ -14,17 +13,38 @@ import matplotlib.pyplot as plt
 
 dpg.create_context()
 
-def print_val(sender):
-    print(dpg.get_value(sender))
-
 def callback(sender, app_data):
-    print("Sender: ", sender)
-    print("App Data: ", app_data)
+    # print("Sender: ", sender)
+    # print("App Data: ", app_data)
     dpg.set_value("file_name",list(app_data['selections'].keys())[0])
     dpg.set_value("file_path",list(app_data['selections'].values())[0])
 
 def time_slice(sender, app_data):
-    file_path_string = dpg.get_value("file_path")
+    """
+time_slice function
+
+Parameters:
+    sender (str): The widget sender
+    app_data (int): Timeslice index 
+
+Returns:
+    sl1 (int): Start index of slice
+    sl2 (int): End index of slice
+
+Functionality:
+    This function calculates the start and end indices 
+    for slicing the waveform data based on the selected 
+    timeslice.
+
+    It gets the waveform length and sampling rate. 
+
+    If triggered from tslice widget, it calculates the slice
+    indices based on the timeslice index.
+
+    Otherwise it uses the current tslice value.
+
+    Returns the calculated start and end indices.
+    """
     tlen = dpg.get_value("tlen")
     fs = dpg.get_value("fs")
     sl1 = 0
@@ -43,6 +63,25 @@ def time_slice(sender, app_data):
     return int(sl1), int(sl2)
 
 def get_data(sender, app_data):
+    """
+    get_data function
+
+    Parameters:
+        sender (str): The widget sender
+        app_data (dict): Data passed from the widget 
+
+    Functionality:
+        This function retrieves waveform data based on user selection.
+
+        It checks if a .wav file is selected, if so it reads the data using 
+        scipy.io.wavfile.read(). 
+
+        Otherwise it attempts to read the file with obspy using sig_read().
+
+        It then slices the data based on the selected time interval.
+
+        The x and y data arrays are extracted and set to DPG values to plot.
+    """
     print(app_data)
     file_path_string = dpg.get_value("file_path")
         
@@ -85,12 +124,22 @@ def get_data(sender, app_data):
             return 1
 
 def plot_wave():
+    """
+plot_wave function
+
+Functionality:
+    Creates a new window and plot for showing the waveform data.
+
+    It creates a new DPG plot and adds x and y axes.
+
+    The waveform line series is added linked to the x and y arrays.
+
+    The x axis limits are set based on the selected time interval.
+    """
     delete_waveform()
     with dpg.window(label="Waveform",tag="Waveform",height=200,width=800,pos=[0,150],on_close=delete_waveform()):
         def create_plot():
             with dpg.plot(label="Line Series", height=-1, width=-1,parent="Waveform",query=True):
-                # dpg.add_plot_legend(parent="Line Series")
-                # dpg.add_drag_line(label="dline1", color=[255, 0, 0, 255], default_value=2.0, callback=print_val)
                 dpg.add_plot_axis(dpg.mvXAxis, label="x",tag="xaxis_tag")
                 dpg.add_plot_axis(dpg.mvYAxis, label="y", tag="yaxis")
                 sl = dpg.get_value("tslice")
