@@ -13,6 +13,10 @@ import matplotlib.pyplot as plt
 
 dpg.create_context()
 
+def ident(x):
+        return x
+normalizer_dict = {"linear":ident,"log10":np.log10,"ln":np.log,"sqrt":np.sqrt}
+
 def callback(sender, app_data):
     # print("Sender: ", sender)
     # print("App Data: ", app_data)
@@ -137,7 +141,7 @@ Functionality:
     The x axis limits are set based on the selected time interval.
     """
     delete_waveform()
-    with dpg.window(label="Waveform",tag="Waveform",height=200,width=800,pos=[0,150],on_close=delete_waveform()):
+    with dpg.window(label="Waveform",tag="Waveform",height=200,width=800,pos=[0,150],on_close=delete_waveform):
         def create_plot():
             with dpg.plot(label="Line Series", height=-1, width=-1,parent="Waveform",query=True):
                 dpg.add_plot_axis(dpg.mvXAxis, label="x",tag="xaxis_tag")
@@ -170,22 +174,54 @@ def spectro(sender, app_data):
 def plot(sender, app_data):
     get_data(sender=sender,app_data=app_data)
     plot_wave()
-    spectro_texture()
+    spectro_texture(sender=sender,app_data=app_data)
 
-def spectro_texture():
-    delete_spectrogram()
+def next_plot(sender, app_data):
+
+    if dpg.does_item_exist("spectro") and not dpg.does_item_exist("Wave form"):
+        spectro_texture(sender=sender,app_data=app_data)
+    elif dpg.does_item_exist("Wave form"):
+        plot(sender, app_data)
+    else:
+        plot(sender, app_data)
+
+        
+
+
+def spectro_texture(sender, app_data):
+    if dpg.does_item_exist("spectro"):
+        delete_spectrogram()
+
+    if not dpg.does_item_exist("Waveform"):
+        get_data(sender=sender,app_data=app_data)
+        spec_pos = (0,120)
+        spec_height = 600
+        spec_width = 1000
+    else:
+        spec_pos = [0,350]
+        spec_height = 300
+        spec_width = 1000
+
     data = np.array(dpg.get_value("y_array"))
     fs = dpg.get_value("fs")
     section = dpg.get_value("tslice")
     # data = data[section*600*int(fs):(section+1)*600*int(fs)]
-    f, t, Sxx = spectrogram(data, fs)
+    wtype = dpg.get_value("spectro_window")
+    window_size = dpg.get_value("window_size")
+    if wtype in ["hamming","blackman","boxcar"]:
+        w_param = (wtype)
+    else:
+        w_param = (wtype,window_size)
+    
+    
+    f, t, Sxx = spectrogram(x=data, fs=fs,window=w_param,nperseg=int(dpg.get_value("npseg")))
     dpg.set_value("spectro_freq",list(f))
     dpg.set_value("spectro_time",list(t))
     Sxx = np.flipud(Sxx)
-    Sxx = 10 * np.log10(Sxx)
+    Sxx = normalizer_dict[dpg.get_value("normalizer")](Sxx)
     texture_data = []
     for i in Sxx.reshape(1,-1):
-        texture_data+=list(plt.colormaps['viridis'](i/Sxx.max()))
+        texture_data+=list(plt.colormaps[dpg.get_value("spectro_color")](i/Sxx.max()))
 
     texture_data = np.array(texture_data).reshape(1,-1)[0]
     raw_data = array.array('f', texture_data)
@@ -197,7 +233,7 @@ def spectro_texture():
                             format=dpg.mvFormat_Float_rgba, 
                             tag="texture_tag")
     
-    with dpg.window(label="Spectrogram", tag="spectro", width=800, height=350,pos=[0,350],):
+    with dpg.window(label="Spectrogram", tag="spectro", width=spec_width, height=spec_height,pos=spec_pos,on_close=delete_spectrogram):
         # create plot
         with dpg.plot(label="Spectrogram plot",tag="s_plot", height=-1, width=-1,query=True, no_mouse_pos=True):
             # dpg.add_plot_legend()
@@ -217,10 +253,8 @@ def spectro_texture():
 def apply_filter(sender, app_data):
     # reset filtering by getting the data
     app_data = dpg.get_value("filter_select")
-    get_data(sender, app_data)
     if app_data == "No Filter":
-        plot_wave()
-        spectro_texture()
+        next_plot(sender, app_data)
         return 0
     else:
         filter_name = app_data
@@ -232,8 +266,7 @@ def apply_filter(sender, app_data):
     b,a = butter(N=4,Wn=filter_params["value"],btype=filter_params["type"],fs=dpg.get_value("fs"))
     y_arr = lfilter(b=b,a=a,x=np.array(dpg.get_value("y_array")))
     dpg.set_value("y_array",list(y_arr))
-    plot_wave()
-    spectro_texture()
+    next_plot(sender, app_data)
 
 
  
@@ -285,24 +318,39 @@ with dpg.window(label="Controls",tag="Controls", width=800, height=100):
     with dpg.menu_bar():  
         dpg.add_button(label="File", callback=lambda: dpg.show_item("file_dialog_tag"))
         dpg.add_button(label="Plot", tag="plot",  callback=plot)
-        dpg.add_button(label="Waveform", tag="wave",  callback=plot_wave)
-        dpg.add_button(label="Spectrogram",callback=spectro_texture)
+        dpg.add_button(label="Waveform", tag="wave",  callback=plot)
+        dpg.add_button(label="Spectrogram",tag="spec",callback=spectro_texture)
     with dpg.group(horizontal=True):
-        dpg.add_text(label="file_name",default_value="No file loaded",tag="file_name")
-        dpg.add_text(label="file_type",default_value="No file loaded",tag="file_type")
-    dpg.add_input_int(label="Time interval size (S)",tag="tlen",width=100,default_value=600, min_value=0, min_clamped=True,)
-    dpg.add_input_int(label="Time Slice",tag="tslice",width=100,default_value=0, min_value=0, min_clamped=True, callback=plot)
-
-with dpg.window(label="Filters",tag="filters",width=300,height=130, pos=[225,20]):
-    with dpg.group(horizontal=True):
-        dpg.add_listbox(tag="filter_select",items=["No Filter","Low Pass","Band Pass", "High Pass","Wind"],width=100,num_items=5,callback=apply_filter)
         with dpg.group():
-            dpg.add_input_float(label="Low pass <",tag="lp_val",width=100)
+            with dpg.group(horizontal=True):
+                dpg.add_text(label="file_name",default_value="No file loaded",tag="file_name")
+                dpg.add_text(label="file_type",default_value="No file loaded",tag="file_type")
+            dpg.add_input_int(label="Time interval size (S)",tag="tlen",width=100,default_value=600, min_value=0, min_clamped=True,)
+            dpg.add_input_int(label="Time Slice",tag="tslice",width=100,default_value=0, min_value=0, min_clamped=True, callback=next_plot)
+        with dpg.group(horizontal=True):
+            dpg.add_listbox(tag="filter_select",items=["No Filter","Low Pass","Band Pass", "High Pass","Wind"],width=100,num_items=5,callback=apply_filter)
             with dpg.group():
+                dpg.add_input_float(label="Low pass <",tag="lp_val",width=100)
+                # with dpg.group():
                 dpg.add_input_float(label="Band pass >",tag="bp_low",width=100)
                 dpg.add_input_float(label="Band pass <",tag="bp_high",width=100)
+                dpg.add_input_float(label="High pass >",tag="hp_val",width=100)
+        with dpg.group():
+            dpg.add_combo(tag="spectro_color",width=100,default_value="magma",items=['viridis', 'plasma', 'inferno', 'magma', 'cividis',"seismic"])
+            dpg.add_combo(tag="spectro_window",width=100, default_value="tukey",items=["tukey","hamming","blackman","boxcar"])
+            dpg.add_combo(tag="npseg",width=100,default_value="256",items=[f"{2**i}" for i in range(8,12)])
+            dpg.add_input_float(tag="window_size",width=100,default_value=0.25)
+            dpg.add_combo(tag="normalizer",width=100, default_value="log10",items=list(normalizer_dict.keys()))
+# with dpg.window(label="Filters",tag="filters",width=300,height=130, pos=[225,20]):
+#     with dpg.group(horizontal=True):
+#         dpg.add_listbox(tag="filter_select",items=["No Filter","Low Pass","Band Pass", "High Pass","Wind"],width=100,num_items=5,callback=apply_filter)
+#         with dpg.group():
+#             dpg.add_input_float(label="Low pass <",tag="lp_val",width=100)
+#             with dpg.group():
+#                 dpg.add_input_float(label="Band pass >",tag="bp_low",width=100)
+#                 dpg.add_input_float(label="Band pass <",tag="bp_high",width=100)
         
-            dpg.add_input_float(label="High pass >",tag="hp_val",width=100)
+            # dpg.add_input_float(label="High pass >",tag="hp_val",width=100)
 
 def retreive_query():
     if dpg.is_plot_queried("s_plot"):
@@ -315,10 +363,10 @@ def retreive_query():
         time_corrected = np.linspace(tstart,tend,t.shape[0])
         # freq_corrected = np.linspace(tstart,tend,f.shape[0])
         # print(f)
-        t1 = time_corrected[int(x_1)]
-        t2 = time_corrected[int(x_2)]
-        f1 = f[int(y_1)]
-        f2 = f[int(y_2)]
+        t1 = np.round(time_corrected[int(x_1)],0)
+        t2 = np.round(time_corrected[int(x_2)],0)
+        f1 = np.round(f[int(y_1)],1)
+        f2 = np.round(f[int(y_2)],1)
         dpg.set_value("text",str(f"from times {t1} to {t2} and {f1} to {f2} Hz"))
 
 def spectro_mouse_pos():
@@ -342,12 +390,14 @@ def spectro_mouse_pos():
             dpg.set_value("plot_mouse","Hover the spectrogram")
     else:
         dpg.set_value("plot_mouse","Hover the spectrogram")
-with dpg.window(label="Annotations"):
+with dpg.window(label="Annotations",pos=(800,20),height=800,width=500):
     dpg.add_button(label="Get Query",callback=retreive_query)
     dpg.add_text(tag="text",default_value="Queried")
     dpg.add_text(tag="plot_mouse",default_value="")
+    dpg.add_input_text(label="Analyst Assessment",tag="an_a",height=400,width=400,multiline=True)
 
 dpg.show_metrics()
+dpg.show_item_registry()
 dpg.create_viewport(title='Custom Title',height=300,width=800)
 dpg.setup_dearpygui()
 dpg.show_viewport()
