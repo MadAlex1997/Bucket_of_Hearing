@@ -9,7 +9,7 @@ import json
 # data_path = "../Data/"
 # sensor_name = "sensor1"
 with open("./sensor_info.json","r") as si:
-    sidict = json.load(si.read())
+    sidict = json.load(si)
     seconds = sidict["collect_duration"]
     samplerate = sidict["samplerate"]
     data_path = sidict["data_path"]
