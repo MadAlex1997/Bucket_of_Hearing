@@ -1,10 +1,10 @@
 {
-    "sensor_name" : "My computer",
+    "sensor_name" : "InsertSensorName",
     "samplerate" : 16000,
     "collect_duration": 30,
-    "location" : "My Office/ Living Room",
+    "location" : "Insert location decription",
     "data_path" : "./Data/",
     "meta_path" : "./Meta/",
-    "mac_address": "put mac_address here"
-
+    "mac_address" : "put mac_address here",
+    "Bucket_name" : "bname"
 }

@@ -1,5 +1,5 @@
+# This module creates the metadata json files
 import json
-from sounddevice import rec, wait
 from datetime import datetime
 import numpy as np
 import os
@@ -11,11 +11,9 @@ from hashlib import sha256
 
 with open("./sensor_info.json","r") as si:
     sidict = json.load(si)
-    seconds = sidict["collect_duration"]
-    samplerate = sidict["samplerate"]
     data_path = sidict["data_path"]
     meta_path = sidict["meta_path"]
-    sensor_name = sidict["sensor_name"]
+
 
 def check_waiting():
     """
@@ -55,7 +53,8 @@ def write_metadata(file):
         json.dump(json_dict,jfile)
         
 def metadata():
-    for _ in range(5):
+    #replace with while loop in production
+    while True:
         data_waiting = check_waiting()
         if data_waiting:
             for file in data_waiting:
