@@ -63,5 +63,6 @@ def send():
         if files_waiting:
             storage_path = make_local_storage()
             move_local(files_waiting,storage_path)
+            
 
 

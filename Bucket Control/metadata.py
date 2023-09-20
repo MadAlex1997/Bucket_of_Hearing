@@ -7,6 +7,7 @@ from time import sleep
 from hashlib import sha256
 # from pigps import GPS
 
+
 # gps = GPS()
 
 with open("./sensor_info.json","r") as si:
