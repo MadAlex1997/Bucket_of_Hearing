@@ -1,6 +1,7 @@
+#TODO integrate scipy resample for spectrogram
 import dearpygui.dearpygui as dpg
 from obspy import read as sig_read
-from scipy.signal import spectrogram, butter, lfilter
+from scipy.signal import spectrogram, butter, lfilter, resample
 from scipy.io import wavfile
 import numpy as np
 import warnings
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 
 
 dpg.create_context()
-
+global GSxx
 def ident(x):
         return x
 normalizer_dict = {"linear":ident,"log10":np.log10,"ln":np.log,"sqrt":np.sqrt}
@@ -100,9 +101,9 @@ def get_data(sender, app_data):
         sl1, sl2 = time_slice(sender=sender, app_data=app_data)
         data = data[sl1:sl2]
         time = time[sl1:sl2]
-
-        x_arr = list(time)
-        y_arr = list(data)
+        # fs,x,y = resample_data(time,data)
+        x_arr = list(data)
+        y_arr = list(time)
         dpg.set_value("file_type","WAV")
         dpg.set_value("x_array",x_arr)
         dpg.set_value("y_array",y_arr)
@@ -178,9 +179,9 @@ def plot(sender, app_data):
 
 def next_plot(sender, app_data):
 
-    if dpg.does_item_exist("spectro") and not dpg.does_item_exist("Wave form"):
+    if dpg.does_item_exist("spectro") and not dpg.does_item_exist("Waveform"):
         spectro_texture(sender=sender,app_data=app_data)
-    elif dpg.does_item_exist("Wave form"):
+    elif dpg.does_item_exist("Waveform"):
         plot(sender, app_data)
     else:
         plot(sender, app_data)
@@ -213,12 +214,18 @@ def spectro_texture(sender, app_data):
     else:
         w_param = (wtype,window_size)
     
-    
+    # b,a = butter(4,100, fs= fs)
+    # data = lfilter(b,a,data)
+    # data = data[::5]
+    # fs=200
     f, t, Sxx = spectrogram(x=data, fs=fs,window=w_param,nperseg=int(dpg.get_value("npseg")))
+    
     dpg.set_value("spectro_freq",list(f))
     dpg.set_value("spectro_time",list(t))
     Sxx = np.flipud(Sxx)
     Sxx = normalizer_dict[dpg.get_value("normalizer")](Sxx)
+    # print(Sxx)
+    # Sxx[Sxx<np.quantile(Sxx,0.05)]=0
     texture_data = []
     for i in Sxx.reshape(1,-1):
         texture_data+=list(plt.colormaps[dpg.get_value("spectro_color")](i/Sxx.max()))
@@ -268,7 +275,12 @@ def apply_filter(sender, app_data):
     dpg.set_value("y_array",list(y_arr))
     next_plot(sender, app_data)
 
-
+def resample_data(x_arr,y_arr):
+    new_fs = 2*dpg.get_value("fmax")
+    y_arr = resample(x=y_arr,num=new_fs)
+    x_arr = np.linspace(x_arr.min(), x_arr.max(), new_fs)
+    return new_fs, x_arr, y_arr
+    
  
     
 
@@ -327,16 +339,25 @@ with dpg.window(label="Controls",tag="Controls", width=800, height=100):
                 dpg.add_text(label="file_type",default_value="No file loaded",tag="file_type")
             dpg.add_input_int(label="Time interval size (S)",tag="tlen",width=100,default_value=600, min_value=0, min_clamped=True,)
             dpg.add_input_int(label="Time Slice",tag="tslice",width=100,default_value=0, min_value=0, min_clamped=True, callback=next_plot)
+            # dpg.add_input_int(label="Max Frequency",
+            #                    tag="fmax",width=100,
+            #                    max_value=int(dpg.get_value("fs")/2),
+            #                 #    max_clamped=True,
+            #                    default_value=400,
+            #                    min_value=0,
+            #                    step=50,
+            #                    step_fast=1000,
+            #                    min_clamped=True)
         with dpg.group(horizontal=True):
             dpg.add_listbox(tag="filter_select",items=["No Filter","Low Pass","Band Pass", "High Pass","Wind"],width=100,num_items=5,callback=apply_filter)
             with dpg.group():
-                dpg.add_input_float(label="Low pass <",tag="lp_val",width=100)
+                dpg.add_input_float(label="Low pass <",tag="lp_val",width=100, default_value=30)
                 # with dpg.group():
-                dpg.add_input_float(label="Band pass >",tag="bp_low",width=100)
-                dpg.add_input_float(label="Band pass <",tag="bp_high",width=100)
-                dpg.add_input_float(label="High pass >",tag="hp_val",width=100)
+                dpg.add_input_float(label="Band pass >",tag="bp_low",width=100,default_value=1)
+                dpg.add_input_float(label="Band pass <",tag="bp_high",width=100,default_value=30)
+                dpg.add_input_float(label="High pass >",tag="hp_val",width=100,default_value=1)
         with dpg.group():
-            dpg.add_combo(tag="spectro_color",width=100,default_value="magma",items=['viridis', 'plasma', 'inferno', 'magma', 'cividis',"seismic"])
+            dpg.add_combo(tag="spectro_color",width=100,default_value="magma",items=['viridis', 'plasma', 'inferno', 'magma', 'cividis',"seismic","hsv"])
             dpg.add_combo(tag="spectro_window",width=100, default_value="tukey",items=["tukey","hamming","blackman","boxcar"])
             dpg.add_combo(tag="npseg",width=100,default_value="256",items=[f"{2**i}" for i in range(8,12)])
             dpg.add_input_float(tag="window_size",width=100,default_value=0.25)
